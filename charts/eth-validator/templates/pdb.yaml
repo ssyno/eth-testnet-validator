@@ -1,0 +1,56 @@
+{{- if .Values.podDisruptionBudget.enabled }}
+{{- if .Values.geth.enabled }}
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: {{ include "eth-validator.geth.fullname" . }}
+  labels:
+    {{- include "eth-validator.geth.labels" . | nindent 4 }}
+spec:
+  {{- if .Values.podDisruptionBudget.minAvailable }}
+  minAvailable: {{ .Values.podDisruptionBudget.minAvailable }}
+  {{- else if .Values.podDisruptionBudget.maxUnavailable }}
+  maxUnavailable: {{ .Values.podDisruptionBudget.maxUnavailable }}
+  {{- end }}
+  selector:
+    matchLabels:
+      {{- include "eth-validator.geth.selectorLabels" . | nindent 6 }}
+{{- end }}
+{{- if .Values.lighthouse.beacon.enabled }}
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: {{ include "eth-validator.beacon.fullname" . }}
+  labels:
+    {{- include "eth-validator.beacon.labels" . | nindent 4 }}
+spec:
+  {{- if .Values.podDisruptionBudget.minAvailable }}
+  minAvailable: {{ .Values.podDisruptionBudget.minAvailable }}
+  {{- else if .Values.podDisruptionBudget.maxUnavailable }}
+  maxUnavailable: {{ .Values.podDisruptionBudget.maxUnavailable }}
+  {{- end }}
+  selector:
+    matchLabels:
+      {{- include "eth-validator.beacon.selectorLabels" . | nindent 6 }}
+{{- end }}
+{{- if .Values.lighthouse.validator.enabled }}
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: {{ include "eth-validator.validator.fullname" . }}
+  labels:
+    {{- include "eth-validator.validator.labels" . | nindent 4 }}
+spec:
+  {{- if .Values.podDisruptionBudget.minAvailable }}
+  minAvailable: {{ .Values.podDisruptionBudget.minAvailable }}
+  {{- else if .Values.podDisruptionBudget.maxUnavailable }}
+  maxUnavailable: {{ .Values.podDisruptionBudget.maxUnavailable }}
+  {{- end }}
+  selector:
+    matchLabels:
+      {{- include "eth-validator.validator.selectorLabels" . | nindent 6 }}
+{{- end }}
+{{- end }}

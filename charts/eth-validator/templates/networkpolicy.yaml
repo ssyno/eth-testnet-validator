@@ -1,0 +1,171 @@
+{{- if .Values.networkPolicy.enabled }}
+{{- if .Values.geth.enabled }}
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ include "eth-validator.geth.fullname" . }}
+  labels:
+    {{- include "eth-validator.geth.labels" . | nindent 4 }}
+spec:
+  podSelector:
+    matchLabels:
+      {{- include "eth-validator.geth.selectorLabels" . | nindent 6 }}
+  policyTypes:
+    - Ingress
+    - Egress
+  ingress:
+    # Allow beacon to connect to authrpc
+    - from:
+        - podSelector:
+            matchLabels:
+              {{- include "eth-validator.beacon.selectorLabels" . | nindent 14 }}
+      ports:
+        - protocol: TCP
+          port: {{ .Values.geth.ports.authrpc }}
+    # Allow P2P traffic from anywhere
+    - ports:
+        - protocol: TCP
+          port: {{ .Values.geth.ports.p2p }}
+        - protocol: UDP
+          port: {{ .Values.geth.ports.p2p }}
+    # Allow metrics scraping (from prometheus namespace if exists)
+    - ports:
+        - protocol: TCP
+          port: {{ .Values.geth.ports.metrics }}
+    {{- with .Values.networkPolicy.ingressRules }}
+    {{- toYaml . | nindent 4 }}
+    {{- end }}
+  egress:
+    # Allow DNS
+    - to: []
+      ports:
+        - protocol: UDP
+          port: 53
+        - protocol: TCP
+          port: 53
+    # Allow P2P traffic to anywhere
+    - ports:
+        - protocol: TCP
+          port: {{ .Values.geth.ports.p2p }}
+        - protocol: UDP
+          port: {{ .Values.geth.ports.p2p }}
+    # Allow HTTPS for discovery
+    - ports:
+        - protocol: TCP
+          port: 443
+    {{- with .Values.networkPolicy.egressRules }}
+    {{- toYaml . | nindent 4 }}
+    {{- end }}
+{{- end }}
+{{- if .Values.lighthouse.beacon.enabled }}
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ include "eth-validator.beacon.fullname" . }}
+  labels:
+    {{- include "eth-validator.beacon.labels" . | nindent 4 }}
+spec:
+  podSelector:
+    matchLabels:
+      {{- include "eth-validator.beacon.selectorLabels" . | nindent 6 }}
+  policyTypes:
+    - Ingress
+    - Egress
+  ingress:
+    # Allow validator to connect
+    - from:
+        - podSelector:
+            matchLabels:
+              {{- include "eth-validator.validator.selectorLabels" . | nindent 14 }}
+      ports:
+        - protocol: TCP
+          port: {{ .Values.lighthouse.beacon.ports.http }}
+    # Allow P2P traffic
+    - ports:
+        - protocol: TCP
+          port: {{ .Values.lighthouse.beacon.ports.p2p }}
+        - protocol: UDP
+          port: {{ .Values.lighthouse.beacon.ports.p2p }}
+    # Allow metrics scraping
+    - ports:
+        - protocol: TCP
+          port: {{ .Values.lighthouse.beacon.ports.metrics }}
+    {{- with .Values.networkPolicy.ingressRules }}
+    {{- toYaml . | nindent 4 }}
+    {{- end }}
+  egress:
+    # Allow DNS
+    - to: []
+      ports:
+        - protocol: UDP
+          port: 53
+        - protocol: TCP
+          port: 53
+    # Allow connection to Geth
+    - to:
+        - podSelector:
+            matchLabels:
+              {{- include "eth-validator.geth.selectorLabels" . | nindent 14 }}
+      ports:
+        - protocol: TCP
+          port: {{ .Values.geth.ports.authrpc }}
+    # Allow P2P traffic
+    - ports:
+        - protocol: TCP
+          port: {{ .Values.lighthouse.beacon.ports.p2p }}
+        - protocol: UDP
+          port: {{ .Values.lighthouse.beacon.ports.p2p }}
+    # Allow HTTPS for checkpoint sync
+    - ports:
+        - protocol: TCP
+          port: 443
+    {{- with .Values.networkPolicy.egressRules }}
+    {{- toYaml . | nindent 4 }}
+    {{- end }}
+{{- end }}
+{{- if .Values.lighthouse.validator.enabled }}
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ include "eth-validator.validator.fullname" . }}
+  labels:
+    {{- include "eth-validator.validator.labels" . | nindent 4 }}
+spec:
+  podSelector:
+    matchLabels:
+      {{- include "eth-validator.validator.selectorLabels" . | nindent 6 }}
+  policyTypes:
+    - Ingress
+    - Egress
+  ingress:
+    # Allow metrics scraping
+    - ports:
+        - protocol: TCP
+          port: {{ .Values.lighthouse.validator.ports.metrics }}
+    {{- with .Values.networkPolicy.ingressRules }}
+    {{- toYaml . | nindent 4 }}
+    {{- end }}
+  egress:
+    # Allow DNS
+    - to: []
+      ports:
+        - protocol: UDP
+          port: 53
+        - protocol: TCP
+          port: 53
+    # Allow connection to Beacon
+    - to:
+        - podSelector:
+            matchLabels:
+              {{- include "eth-validator.beacon.selectorLabels" . | nindent 14 }}
+      ports:
+        - protocol: TCP
+          port: {{ .Values.lighthouse.beacon.ports.http }}
+    {{- with .Values.networkPolicy.egressRules }}
+    {{- toYaml . | nindent 4 }}
+    {{- end }}
+{{- end }}
+{{- end }}

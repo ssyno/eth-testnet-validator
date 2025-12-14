@@ -1,0 +1,188 @@
+{{- if .Values.lighthouse.validator.enabled }}
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: {{ include "eth-validator.validator.fullname" . }}
+  labels:
+    {{- include "eth-validator.validator.labels" . | nindent 4 }}
+spec:
+  serviceName: {{ include "eth-validator.validator.fullname" . }}
+  replicas: 1
+  selector:
+    matchLabels:
+      {{- include "eth-validator.validator.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "eth-validator.validator.selectorLabels" . | nindent 8 }}
+    spec:
+      {{- include "eth-validator.imagePullSecrets" . | nindent 6 }}
+      securityContext:
+        {{- toYaml .Values.lighthouse.validator.securityContext | nindent 8 }}
+      {{- with .Values.lighthouse.validator.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.lighthouse.validator.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.lighthouse.validator.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.lighthouse.validator.topologySpreadConstraints }}
+      topologySpreadConstraints:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      initContainers:
+        - name: init-datadir
+          image: "{{ .Values.initImage.repository }}:{{ .Values.initImage.tag }}"
+          imagePullPolicy: {{ .Values.initImage.pullPolicy }}
+          command:
+            - sh
+            - -c
+            - |
+              mkdir -p /work/validators
+              chmod 700 /work/validators
+          securityContext:
+            runAsUser: 1000
+            runAsGroup: 1000
+          volumeMounts:
+            - name: validators-work
+              mountPath: /work
+        - name: extract-keys
+          image: "{{ .Values.initImage.repository }}:{{ .Values.initImage.tag }}"
+          imagePullPolicy: {{ .Values.initImage.pullPolicy }}
+          command:
+            - sh
+            - -c
+            - |
+              if [ -f "/secrets/validator_keys.tar.gz" ]; then
+                echo "Extracting validator keys from tar.gz..."
+                cd /work/validators
+                tar -xzf /secrets/validator_keys.tar.gz
+                chmod -R 600 /work/validators/*
+                echo "Keys extracted successfully"
+              else
+                echo "No validator_keys.tar.gz found, skipping extraction..."
+              fi
+          securityContext:
+            runAsUser: 1000
+            runAsGroup: 1000
+          volumeMounts:
+            - name: validators-work
+              mountPath: /work
+            - name: validator-keys
+              mountPath: /secrets
+              readOnly: true
+        - name: import-keys
+          image: "{{ .Values.lighthouse.validator.image.repository }}:{{ .Values.lighthouse.validator.image.tag }}"
+          command:
+            - sh
+            - -c
+            - |
+              if [ -d "/validators" ] && [ "$(ls -A /validators 2>/dev/null)" ]; then
+                echo "Importing validator keys..."
+                lighthouse account validator import \
+                  --network={{ .Values.global.network | default .Values.network }} \
+                  --datadir=/data \
+                  --directory=/validators \
+                  --password-file=/secrets/validator_password.txt \
+                  --reuse-password
+                echo "Keys imported successfully"
+              else
+                echo "No validator keys found to import, skipping..."
+              fi
+          securityContext:
+            runAsUser: 1000
+            runAsGroup: 1000
+          volumeMounts:
+            - name: data
+              mountPath: /data
+            - name: validators-work
+              mountPath: /validators
+              readOnly: true
+            - name: validator-keys
+              mountPath: /secrets
+              readOnly: true
+        - name: wait-for-beacon
+          image: "{{ .Values.initImage.repository }}:{{ .Values.initImage.tag }}"
+          imagePullPolicy: {{ .Values.initImage.pullPolicy }}
+          command:
+            - sh
+            - -c
+            - |
+              echo "Waiting for Beacon node to be ready..."
+              # Accept both 200 (synced) and 206 (syncing) as ready
+              while true; do
+                if wget -q -O /dev/null http://{{ include "eth-validator.beacon.fullname" . }}:{{ .Values.lighthouse.beacon.ports.http }}/eth/v1/node/syncing 2>/dev/null; then
+                  echo "Beacon is ready!"
+                  exit 0
+                fi
+                echo "Beacon not ready yet, waiting..."
+                sleep 5
+              done
+          securityContext:
+            runAsUser: 1000
+            runAsGroup: 1000
+      containers:
+        - name: lighthouse-validator
+          image: "{{ .Values.lighthouse.validator.image.repository }}:{{ .Values.lighthouse.validator.image.tag }}"
+          imagePullPolicy: {{ .Values.lighthouse.validator.image.pullPolicy }}
+          securityContext:
+            {{- toYaml .Values.lighthouse.validator.containerSecurityContext | nindent 12 }}
+          args:
+            - lighthouse
+            - validator_client
+            - --network={{ .Values.global.network | default .Values.network }}
+            - --datadir=/data
+            - --beacon-nodes=http://{{ include "eth-validator.beacon.fullname" . }}:{{ .Values.lighthouse.beacon.ports.http }}
+            - --graffiti={{ .Values.lighthouse.validator.graffiti | quote }}
+            - --metrics
+            - --metrics-address=0.0.0.0
+            - --metrics-port={{ .Values.lighthouse.validator.ports.metrics }}
+            - --metrics-allow-origin=*
+            - --suggested-fee-recipient={{ .Values.global.feeRecipient | default "0x0000000000000000000000000000000000000000" }}
+            {{- range .Values.lighthouse.validator.extraArgs }}
+            - {{ . | quote }}
+            {{- end }}
+          ports:
+            - name: metrics
+              containerPort: {{ .Values.lighthouse.validator.ports.metrics }}
+              protocol: TCP
+          {{- if .Values.probes.lighthouse.validator.liveness.enabled }}
+          livenessProbe:
+            httpGet:
+              path: /metrics
+              port: metrics
+            initialDelaySeconds: {{ .Values.probes.lighthouse.validator.liveness.initialDelaySeconds }}
+            periodSeconds: {{ .Values.probes.lighthouse.validator.liveness.periodSeconds }}
+            timeoutSeconds: {{ .Values.probes.lighthouse.validator.liveness.timeoutSeconds }}
+            failureThreshold: {{ .Values.probes.lighthouse.validator.liveness.failureThreshold }}
+          {{- end }}
+          resources:
+            {{- toYaml .Values.lighthouse.validator.resources | nindent 12 }}
+          volumeMounts:
+            - name: data
+              mountPath: /data
+      volumes:
+        - name: validators-work
+          emptyDir: {}
+        - name: validator-keys
+          secret:
+            secretName: {{ .Values.validatorKeys.existingSecretName }}
+            optional: true
+  {{- if .Values.lighthouse.validator.persistence.enabled }}
+  volumeClaimTemplates:
+    - metadata:
+        name: data
+      spec:
+        accessModes:
+          - {{ .Values.lighthouse.validator.persistence.accessMode }}
+        {{- include "eth-validator.storageClass" (dict "storageClass" .Values.lighthouse.validator.persistence.storageClass "global" .Values.global) | nindent 8 }}
+        resources:
+          requests:
+            storage: {{ .Values.lighthouse.validator.persistence.size }}
+  {{- end }}
+{{- end }}

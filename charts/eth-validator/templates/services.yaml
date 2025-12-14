@@ -1,0 +1,98 @@
+{{- if .Values.geth.enabled }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "eth-validator.geth.fullname" . }}
+  labels:
+    {{- include "eth-validator.geth.labels" . | nindent 4 }}
+  {{- with .Values.service.annotations }}
+  annotations:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+spec:
+  type: {{ .Values.service.type }}
+  ports:
+    - name: http
+      port: {{ .Values.geth.ports.http }}
+      targetPort: http
+      protocol: TCP
+    - name: ws
+      port: {{ .Values.geth.ports.ws }}
+      targetPort: ws
+      protocol: TCP
+    - name: authrpc
+      port: {{ .Values.geth.ports.authrpc }}
+      targetPort: authrpc
+      protocol: TCP
+    - name: metrics
+      port: {{ .Values.geth.ports.metrics }}
+      targetPort: metrics
+      protocol: TCP
+    - name: p2p-tcp
+      port: {{ .Values.geth.ports.p2p }}
+      targetPort: p2p-tcp
+      protocol: TCP
+    - name: p2p-udp
+      port: {{ .Values.geth.ports.p2p }}
+      targetPort: p2p-udp
+      protocol: UDP
+  selector:
+    {{- include "eth-validator.geth.selectorLabels" . | nindent 4 }}
+{{- end }}
+{{- if .Values.lighthouse.beacon.enabled }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "eth-validator.beacon.fullname" . }}
+  labels:
+    {{- include "eth-validator.beacon.labels" . | nindent 4 }}
+  {{- with .Values.service.annotations }}
+  annotations:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+spec:
+  type: {{ .Values.service.type }}
+  ports:
+    - name: http
+      port: {{ .Values.lighthouse.beacon.ports.http }}
+      targetPort: http
+      protocol: TCP
+    - name: metrics
+      port: {{ .Values.lighthouse.beacon.ports.metrics }}
+      targetPort: metrics
+      protocol: TCP
+    - name: p2p-tcp
+      port: {{ .Values.lighthouse.beacon.ports.p2p }}
+      targetPort: p2p-tcp
+      protocol: TCP
+    - name: p2p-udp
+      port: {{ .Values.lighthouse.beacon.ports.p2p }}
+      targetPort: p2p-udp
+      protocol: UDP
+  selector:
+    {{- include "eth-validator.beacon.selectorLabels" . | nindent 4 }}
+{{- end }}
+{{- if .Values.lighthouse.validator.enabled }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "eth-validator.validator.fullname" . }}
+  labels:
+    {{- include "eth-validator.validator.labels" . | nindent 4 }}
+  {{- with .Values.service.annotations }}
+  annotations:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+spec:
+  type: {{ .Values.service.type }}
+  ports:
+    - name: metrics
+      port: {{ .Values.lighthouse.validator.ports.metrics }}
+      targetPort: metrics
+      protocol: TCP
+  selector:
+    {{- include "eth-validator.validator.selectorLabels" . | nindent 4 }}
+{{- end }}

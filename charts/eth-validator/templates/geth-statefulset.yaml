@@ -1,0 +1,159 @@
+{{- if .Values.geth.enabled }}
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: {{ include "eth-validator.geth.fullname" . }}
+  labels:
+    {{- include "eth-validator.geth.labels" . | nindent 4 }}
+spec:
+  serviceName: {{ include "eth-validator.geth.fullname" . }}
+  replicas: 1
+  selector:
+    matchLabels:
+      {{- include "eth-validator.geth.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "eth-validator.geth.selectorLabels" . | nindent 8 }}
+    spec:
+      {{- include "eth-validator.imagePullSecrets" . | nindent 6 }}
+      securityContext:
+        {{- toYaml .Values.geth.securityContext | nindent 8 }}
+      {{- with .Values.geth.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.geth.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.geth.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.geth.topologySpreadConstraints }}
+      topologySpreadConstraints:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      initContainers:
+        - name: init-datadir
+          image: "{{ .Values.initImage.repository }}:{{ .Values.initImage.tag }}"
+          imagePullPolicy: {{ .Values.initImage.pullPolicy }}
+          command:
+            - sh
+            - -c
+            - |
+              mkdir -p /data/geth
+          securityContext:
+            runAsUser: 1000
+            runAsGroup: 1000
+          volumeMounts:
+            - name: data
+              mountPath: /data
+      containers:
+        - name: geth
+          image: "{{ .Values.geth.image.repository }}:{{ .Values.geth.image.tag }}"
+          imagePullPolicy: {{ .Values.geth.image.pullPolicy }}
+          securityContext:
+            {{- toYaml .Values.geth.containerSecurityContext | nindent 12 }}
+          args:
+            - --{{ .Values.global.network | default .Values.network }}
+            - --datadir=/data
+            - --http
+            - --http.addr=0.0.0.0
+            - --http.port={{ .Values.geth.ports.http }}
+            - --http.api=eth,net,web3,engine,admin
+            - --http.vhosts=*
+            - --http.corsdomain=*
+            - --ws
+            - --ws.addr=0.0.0.0
+            - --ws.port={{ .Values.geth.ports.ws }}
+            - --ws.api=eth,net,web3,engine
+            - --ws.origins=*
+            - --authrpc.addr=0.0.0.0
+            - --authrpc.port={{ .Values.geth.ports.authrpc }}
+            - --authrpc.vhosts=*
+            - --authrpc.jwtsecret=/secrets/jwtsecret
+            - --metrics
+            - --metrics.addr=0.0.0.0
+            - --metrics.port={{ .Values.geth.ports.metrics }}
+            - --port={{ .Values.geth.ports.p2p }}
+            - --syncmode=snap
+            - --state.scheme=path
+            {{- range .Values.geth.extraArgs }}
+            - {{ . | quote }}
+            {{- end }}
+          ports:
+            - name: http
+              containerPort: {{ .Values.geth.ports.http }}
+              protocol: TCP
+            - name: ws
+              containerPort: {{ .Values.geth.ports.ws }}
+              protocol: TCP
+            - name: authrpc
+              containerPort: {{ .Values.geth.ports.authrpc }}
+              protocol: TCP
+            - name: metrics
+              containerPort: {{ .Values.geth.ports.metrics }}
+              protocol: TCP
+            - name: p2p-tcp
+              containerPort: {{ .Values.geth.ports.p2p }}
+              protocol: TCP
+            - name: p2p-udp
+              containerPort: {{ .Values.geth.ports.p2p }}
+              protocol: UDP
+          {{- if .Values.probes.geth.startup.enabled }}
+          startupProbe:
+            tcpSocket:
+              port: {{ .Values.geth.ports.http }}
+            initialDelaySeconds: {{ .Values.probes.geth.startup.initialDelaySeconds }}
+            periodSeconds: {{ .Values.probes.geth.startup.periodSeconds }}
+            timeoutSeconds: {{ .Values.probes.geth.startup.timeoutSeconds }}
+            failureThreshold: {{ .Values.probes.geth.startup.failureThreshold }}
+          {{- end }}
+          {{- if .Values.probes.geth.liveness.enabled }}
+          livenessProbe:
+            tcpSocket:
+              port: {{ .Values.geth.ports.http }}
+            initialDelaySeconds: {{ .Values.probes.geth.liveness.initialDelaySeconds }}
+            periodSeconds: {{ .Values.probes.geth.liveness.periodSeconds }}
+            timeoutSeconds: {{ .Values.probes.geth.liveness.timeoutSeconds }}
+            failureThreshold: {{ .Values.probes.geth.liveness.failureThreshold }}
+          {{- end }}
+          {{- if .Values.probes.geth.readiness.enabled }}
+          readinessProbe:
+            tcpSocket:
+              port: {{ .Values.geth.ports.http }}
+            initialDelaySeconds: {{ .Values.probes.geth.readiness.initialDelaySeconds }}
+            periodSeconds: {{ .Values.probes.geth.readiness.periodSeconds }}
+            timeoutSeconds: {{ .Values.probes.geth.readiness.timeoutSeconds }}
+            failureThreshold: {{ .Values.probes.geth.readiness.failureThreshold }}
+          {{- end }}
+          resources:
+            {{- toYaml .Values.geth.resources | nindent 12 }}
+          volumeMounts:
+            - name: data
+              mountPath: /data
+            - name: jwt-secret
+              mountPath: /secrets
+              readOnly: true
+      volumes:
+        - name: jwt-secret
+          secret:
+            secretName: {{ .Values.jwtSecret.existingSecretName }}
+            items:
+              - key: {{ .Values.jwtSecret.key }}
+                path: jwtsecret
+  {{- if .Values.geth.persistence.enabled }}
+  volumeClaimTemplates:
+    - metadata:
+        name: data
+      spec:
+        accessModes:
+          - {{ .Values.geth.persistence.accessMode }}
+        {{- include "eth-validator.storageClass" (dict "storageClass" .Values.geth.persistence.storageClass "global" .Values.global) | nindent 8 }}
+        resources:
+          requests:
+            storage: {{ .Values.geth.persistence.size }}
+  {{- end }}
+{{- end }}

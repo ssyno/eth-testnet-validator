@@ -1,0 +1,227 @@
+network: sepolia
+
+global:
+  network: sepolia
+  checkpointSyncUrl: "https://sepolia.beaconstate.info/"
+  feeRecipient: "0x0000000000000000000000000000000000000000"
+  storageClass: ""
+
+geth:
+  enabled: true
+  image:
+    repository: ethereum/client-go
+    tag: "v1.16.7"
+    pullPolicy: IfNotPresent
+  persistence:
+    enabled: true
+    size: 100Gi
+    storageClass: ""
+    accessMode: ReadWriteOnce
+  resources:
+    requests:
+      memory: "8Gi"
+      cpu: "2"
+    limits:
+      memory: "16Gi"
+      cpu: "4"
+  ports:
+    http: 8545
+    ws: 8546
+    authrpc: 8551
+    metrics: 6060
+    p2p: 30303
+  extraArgs: []
+  nodeSelector: {}
+  tolerations: []
+  affinity: {}
+  topologySpreadConstraints: []
+  securityContext:
+    runAsNonRoot: true
+    runAsUser: 1000
+    runAsGroup: 1000
+    fsGroup: 1000
+  containerSecurityContext:
+    allowPrivilegeEscalation: false
+    readOnlyRootFilesystem: false
+    capabilities:
+      drop: [ALL]
+    seccompProfile:
+      type: RuntimeDefault
+
+lighthouse:
+  beacon:
+    enabled: true
+    image:
+      repository: sigp/lighthouse
+      tag: "v8.0.1"
+      pullPolicy: IfNotPresent
+    persistence:
+      enabled: true
+      size: 100Gi
+      storageClass: ""
+      accessMode: ReadWriteOnce
+    resources:
+      requests:
+        memory: "4Gi"
+        cpu: "1"
+      limits:
+        memory: "8Gi"
+        cpu: "2"
+    ports:
+      http: 5052
+      metrics: 5054
+      p2p: 9000
+    checkpointSyncUrl: "https://sepolia.beaconstate.info/"
+    allowInsecureGenesisSync: false
+    bootnodes:
+      - "enr:-Iq4QMCTfIMXnow27baRUb35Q8iiFHSIDBJh6hQM5Axohhf4b6Kr_cOCu0htQ5WvVqKvFgY28893DHAg8gnBAXsAVqmGAX53x8JggmlkgnY0gmlwhLKAlv6Jc2VjcDI1NmsxoQK6S-Cii_KmfFdUJL2TANL3ksaKUnNXvTCv1tLwXs0QgIN1ZHCCIyk"
+      - "enr:-KG4QMJSJ7DHk6v2p-W8zQ3Xv7FfssZ_1E3p2eY6kN13staMObUonAurqyWhODoeY6edXtV8e9eL9RnhgZ9va2SMDRQMhGV0aDKQS-iVMYAAAHD0AQAAAAAAAIJpZIJ2NIJpcIQDhAAhiXNlY3AyNTZrMaEDXBVUZhhmdy1MYor1eGdRJ4vHYghFKDgjyHgt6sJ-IlCDdGNwgiMog3VkcIIjKA"
+    hostNetwork: false
+    enrAddress: ""
+    enrTcpPort: ""
+    enrUdpPort: ""
+    waitForExecution:
+      enabled: true
+      maxWaitSeconds: 120
+      checkIntervalSeconds: 2
+    extraArgs: []
+    nodeSelector: {}
+    tolerations: []
+    affinity: {}
+    topologySpreadConstraints: []
+    securityContext:
+      runAsNonRoot: true
+      runAsUser: 1000
+      runAsGroup: 1000
+      fsGroup: 1000
+    containerSecurityContext:
+      allowPrivilegeEscalation: false
+      readOnlyRootFilesystem: false
+      capabilities:
+        drop: [ALL]
+      seccompProfile:
+        type: RuntimeDefault
+
+  validator:
+    enabled: true
+    image:
+      repository: sigp/lighthouse
+      tag: "v8.0.1"
+      pullPolicy: IfNotPresent
+    persistence:
+      enabled: true
+      size: 10Gi
+      storageClass: ""
+      accessMode: ReadWriteOnce
+    resources:
+      requests:
+        memory: "1Gi"
+        cpu: "500m"
+      limits:
+        memory: "2Gi"
+        cpu: "1"
+    ports:
+      metrics: 5064
+    graffiti: "eth-validator"
+    extraArgs: []
+    nodeSelector: {}
+    tolerations: []
+    affinity: {}
+    topologySpreadConstraints: []
+    securityContext:
+      runAsNonRoot: true
+      runAsUser: 1000
+      runAsGroup: 1000
+      fsGroup: 1000
+    containerSecurityContext:
+      allowPrivilegeEscalation: false
+      readOnlyRootFilesystem: false
+      capabilities:
+        drop: [ALL]
+      seccompProfile:
+        type: RuntimeDefault
+
+jwtSecret:
+  existingSecretName: "eth-jwt"
+  key: "jwtsecret"
+
+validatorKeys:
+  existingSecretName: "eth-validator-keys"
+
+podDisruptionBudget:
+  enabled: true
+  minAvailable: 1
+
+networkPolicy:
+  enabled: false
+  ingressRules: []
+  egressRules: []
+
+serviceMonitor:
+  enabled: false
+  namespace: ""
+  interval: 30s
+  scrapeTimeout: 10s
+  labels: {}
+
+service:
+  type: ClusterIP
+  annotations: {}
+
+probes:
+  geth:
+    startup:
+      enabled: true
+      initialDelaySeconds: 30
+      periodSeconds: 10
+      timeoutSeconds: 5
+      failureThreshold: 30
+    liveness:
+      enabled: true
+      initialDelaySeconds: 60
+      periodSeconds: 30
+      timeoutSeconds: 5
+      failureThreshold: 3
+    readiness:
+      enabled: true
+      initialDelaySeconds: 30
+      periodSeconds: 10
+      timeoutSeconds: 5
+      failureThreshold: 3
+  lighthouse:
+    beacon:
+      startup:
+        enabled: true
+        initialDelaySeconds: 5
+        periodSeconds: 5
+        timeoutSeconds: 5
+        failureThreshold: 60
+      liveness:
+        enabled: true
+        initialDelaySeconds: 60
+        periodSeconds: 30
+        timeoutSeconds: 5
+        failureThreshold: 3
+      readiness:
+        enabled: true
+        initialDelaySeconds: 5
+        periodSeconds: 10
+        timeoutSeconds: 5
+        failureThreshold: 3
+    validator:
+      liveness:
+        enabled: true
+        initialDelaySeconds: 30
+        periodSeconds: 30
+        timeoutSeconds: 5
+        failureThreshold: 3
+
+imagePullSecrets: []
+
+initImage:
+  repository: alpine
+  tag: "3.21"
+  pullPolicy: IfNotPresent
+
+fullnameOverride: ""
+nameOverride: ""
