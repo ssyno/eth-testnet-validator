@@ -1,0 +1,62 @@
+# Local development values for Kind
+
+initImage:
+  repository: alpine
+  tag: "latest"
+  pullPolicy: IfNotPresent
+
+geth:
+  image:
+    tag: "v1.16.7"
+    pullPolicy: IfNotPresent
+  resources:
+    requests:
+      memory: "512Mi"
+      cpu: "250m"
+    limits:
+      memory: "2Gi"
+      cpu: "1"
+  persistence:
+    size: 100Gi
+
+lighthouse:
+  beacon:
+    image:
+      tag: "v8.0.1"
+      pullPolicy: IfNotPresent
+    checkpointSyncUrl: "https://sepolia.beaconstate.info/"
+    hostNetwork: true
+    enrAddress: ""  # Set to your public IP
+    enrTcpPort: "9000"
+    enrUdpPort: "9000"
+    extraArgs:
+      - "--disable-get-blobs"
+    waitForExecution:
+      enabled: false
+    resources:
+      requests:
+        memory: "1Gi"
+        cpu: "750m"
+      limits:
+        memory: "4Gi"
+        cpu: "2"
+    persistence:
+      size: 10Gi
+
+  validator:
+    enabled: true
+    image:
+      tag: "v8.0.1"
+      pullPolicy: IfNotPresent
+    resources:
+      requests:
+        memory: "256Mi"
+        cpu: "100m"
+      limits:
+        memory: "512Mi"
+        cpu: "500m"
+    persistence:
+      size: 1Gi
+
+podDisruptionBudget:
+  enabled: false

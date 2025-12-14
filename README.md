@@ -5,11 +5,11 @@ Ethereum Sepolia testnet validator on Kubernetes — deployable with **3 command
 ## Quick Start
 
 ```bash
-# 1. Provision infrastructure (Kind cluster, secrets, deploy)
+# 1. Provision infrastructure
 ./provision.sh
 
 # 2. Start validator with your keys
-./start-validator.sh /path/to/validator_keys
+./start-validator.sh ./validator_keys
 
 # 3. Check health
 ./check-health.sh
@@ -18,6 +18,38 @@ Ethereum Sepolia testnet validator on Kubernetes — deployable with **3 command
 ## Requirements
 
 - kubectl, helm, kind, docker, openssl
+
+## Generate Validator Keys
+
+Use the [ethstaker-deposit-cli](https://github.com/ethstaker/ethstaker-deposit-cli) (actively maintained fork):
+
+```bash
+# Download (Mac)
+curl -LO https://github.com/ethstaker/ethstaker-deposit-cli/releases/download/v1.2.2/ethstaker_deposit-cli-b13dcb9-darwin-amd64.tar.gz
+tar xzf ethstaker_deposit-cli-*.tar.gz
+cd ethstaker_deposit-cli-*/
+
+# Generate keys for Sepolia testnet
+./deposit new-mnemonic --num_validators 1 --chain sepolia
+
+# Follow prompts:
+#   - Choose language
+#   - Create a password (save this!)
+#   - Write down mnemonic (24 words) - KEEP THIS SAFE
+#   - Confirm mnemonic
+```
+
+This creates a `validator_keys/` folder containing:
+- `keystore-*.json` - encrypted validator key
+- `deposit_data-*.json` - for depositing 32 ETH
+
+Create a password file:
+```bash
+echo "your-password-here" > validator_keys/password.txt
+```
+
+**To activate your validator**, deposit 32 Sepolia ETH at:
+https://sepolia.launchpad.ethereum.org/
 
 ## Architecture
 
@@ -28,88 +60,52 @@ Ethereum Sepolia testnet validator on Kubernetes — deployable with **3 command
 │  │    Geth     │──│  Lighthouse  │──│    Lighthouse     │   │
 │  │ (execution) │  │   (beacon)   │  │   (validator)     │   │
 │  └─────────────┘  └──────────────┘  └───────────────────┘   │
-│         │                │                    │              │
-│         └────────────────┼────────────────────┘              │
-│              eth-jwt     │    eth-validator-keys             │
 └─────────────────────────────────────────────────────────────┘
 ```
 
 ## The 3 Commands
 
 ### 1. `./provision.sh`
-
-Creates Kind cluster, JWT secret, and deploys the Helm chart.
-
-```bash
-./provision.sh
-```
-
-Idempotent — safe to run multiple times.
+Creates Kind cluster, JWT secret, and deploys Helm chart. Idempotent.
 
 ### 2. `./start-validator.sh <keys_dir>`
-
-Imports validator keys and starts the validator.
-
-```bash
-./start-validator.sh ./my-validator-keys
-```
-
-Keys directory must contain:
-- `keystore-*.json` files (from staking-deposit-cli)
-- `password.txt` (keystore password)
+Imports validator keys and restarts validator pod.
 
 ### 3. `./check-health.sh`
-
-Outputs human-readable health status:
-
+Shows sync status and validator state:
 ```
-=== Ethereum Validator Health Check ===
+=== Validator Health ===
 
 Pods:
-  ✓ eth-validator-geth-0 (Running)
-  ✓ eth-validator-beacon-0 (Running)
-  ✓ eth-validator-validator-0 (Running)
+NAME                                 READY   STATUS
+eth-validator-geth-0                 1/1     Running
+eth-validator-beacon-0               1/1     Running
+eth-validator-validator-0            1/1     Running
 
-Beacon Sync:
-  ✓ Synced at slot 9167456
+Beacon:
+  Synced at slot 9167456
 
 Validator:
-  ✓ Validator "0xabc123...def456" is active and attesting on slot 9167456
-
-Execution Layer (Geth):
-  ✓ Synced at block 7654321
+  0xabc123...def456
+  Status: ACTIVE and attesting on slot 9167456
 ```
 
 ## Configuration
 
-Edit `values-dev.yaml` for local settings:
-
+Edit `values-dev.yaml`:
 ```yaml
 lighthouse:
   beacon:
-    enrAddress: "YOUR_PUBLIC_IP"  # Required for P2P
+    enrAddress: "YOUR_PUBLIC_IP"  # For P2P connectivity
 ```
 
 ## P2P Networking
 
-For the beacon to sync, you need either:
-1. Port forward 9000 TCP+UDP on your router to your machine
-2. Or deploy to a cloud environment with public IP
+For beacon to find peers:
+1. Set `enrAddress` to your public IP
+2. Port forward 9000 TCP+UDP on your router
 
-## Secrets
-
-Secrets are auto-created by `provision.sh`, or create manually:
-
-```bash
-# JWT secret
-kubectl create secret generic eth-jwt -n eth-validator \
-  --from-literal=jwtsecret=$(openssl rand -hex 32)
-
-# Validator keys
-kubectl create secret generic eth-validator-keys -n eth-validator \
-  --from-file=validator_keys.tar.gz=./keys.tar.gz \
-  --from-file=validator_password.txt=./password.txt
-```
+Without this, sync distance will keep increasing.
 
 ## Cleanup
 
@@ -117,10 +113,3 @@ kubectl create secret generic eth-validator-keys -n eth-validator \
 helm uninstall eth-validator -n eth-validator
 kind delete cluster --name eth-validator
 ```
-
-## Security
-
-- No plaintext keys in code
-- Persistent storage survives restarts
-- Secrets stored in Kubernetes
-- Pods run as non-root (UID 1000)
