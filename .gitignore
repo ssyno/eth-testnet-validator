@@ -1,0 +1,63 @@
+# Secrets - NEVER commit these
+*.key
+*.pem
+*.p12
+*.keystore
+*.secret
+secrets/
+validator_keys/
+**/secrets/**
+**/validator-keys/**
+
+# Kubernetes
+kubeconfig
+*.kubeconfig
+
+# Helm
+charts/**/charts/
+*.tgz
+
+# Go
+cmd/healthcheck/healthcheck
+bin/
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+*.test
+*.out
+go.work
+go.work.sum
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Local development
+.kind/
+kind-config.yaml
+*.local
+.env
+.env.*
+!.env.example
+
+# Build artifacts
+dist/
+build/
+tmp/
+
+# Logs
+*.log
+logs/
+
+# Coverage
+coverage.out
+coverage.html
