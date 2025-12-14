@@ -61,3 +61,9 @@ logs/
 # Coverage
 coverage.out
 coverage.html
+
+# Deposit CLI tools (download locally)
+staking_deposit-cli-*/
+ethstaker_deposit-cli-*/
+*.tar.gz
+*.sha256

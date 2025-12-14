@@ -1,0 +1,50 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: azure/setup-helm@v4
+        with:
+          version: "3.14.0"
+
+      - name: Lint Helm chart
+        run: helm lint charts/eth-validator
+
+      - name: Lint shell scripts
+        uses: ludeeus/action-shellcheck@master
+        with:
+          scandir: scripts
+
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: azure/setup-helm@v4
+        with:
+          version: "3.14.0"
+
+      - uses: helm/kind-action@v1
+        with:
+          cluster_name: test
+
+      - name: Deploy
+        run: |
+          kubectl create ns eth-validator
+          kubectl create secret generic eth-jwt -n eth-validator \
+            --from-literal=jwtsecret=$(openssl rand -hex 32)
+          helm install eth-validator charts/eth-validator -n eth-validator \
+            --set lighthouse.validator.enabled=false \
+            --wait --timeout 3m
+
+      - name: Verify
+        run: kubectl get pods -n eth-validator
