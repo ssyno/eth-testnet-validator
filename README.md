@@ -1,4 +1,4 @@
-# eth-testnet-validator
+# Ethereum Testnet Validator
 
 Ethereum Sepolia testnet validator on Kubernetes — deployable with **3 commands**.
 
@@ -54,62 +54,89 @@ https://sepolia.launchpad.ethereum.org/
 ## Architecture
 
 ```
-┌─────────────────────────────────────────────────────────────┐
-│                    Kubernetes (Kind)                         │
-│  ┌─────────────┐  ┌──────────────┐  ┌───────────────────┐   │
-│  │    Geth     │──│  Lighthouse  │──│    Lighthouse     │   │
-│  │ (execution) │  │   (beacon)   │  │   (validator)     │   │
-│  └─────────────┘  └──────────────┘  └───────────────────┘   │
-└─────────────────────────────────────────────────────────────┘
+┌─────────────────────────────────────────────────────────────────┐
+│                        Kubernetes                                │
+│                                                                  │
+│  ┌──────────────┐    ┌──────────────┐    ┌──────────────┐       │
+│  │     Geth     │───▶│  Lighthouse  │───▶│  Lighthouse  │       │
+│  │  (execution) │JWT │   (beacon)   │HTTP│  (validator) │       │
+│  └──────────────┘    └──────────────┘    └──────────────┘       │
+│         │                   │                   │                │
+│         ▼                   ▼                   ▼                │
+│  ┌─────────────────────────────────────────────────────────────┐│
+│  │                   Persistent Volumes                         ││
+│  └─────────────────────────────────────────────────────────────┘│
+│                                                                  │
+│  P2P Ports: 30303 (Geth), 9000 (Lighthouse)                     │
+└─────────────────────────────────────────────────────────────────┘
 ```
 
-## The 3 Commands
+## Deployment Options
 
-### 1. `./provision.sh`
-Creates Kind cluster, JWT secret, and deploys Helm chart. Idempotent.
+### Local (KIND)
 
-### 2. `./start-validator.sh <keys_dir>`
-Imports validator keys and restarts validator pod.
+Default mode - creates a local Kubernetes cluster:
 
-### 3. `./check-health.sh`
-Shows sync status and validator state:
-```
-=== Validator Health ===
-
-Pods:
-NAME                                 READY   STATUS
-eth-validator-geth-0                 1/1     Running
-eth-validator-beacon-0               1/1     Running
-eth-validator-validator-0            1/1     Running
-
-Beacon:
-  Synced at slot 9167456
-
-Validator:
-  0xabc123...def456
-  Status: ACTIVE and attesting on slot 9167456
+```bash
+./provision.sh
 ```
 
-## Configuration
+Requires port forwarding on your router:
+- **30303 TCP/UDP** → your machine (Geth P2P)
+- **9000 TCP/UDP** → your machine (Lighthouse P2P)
 
-Edit `values-dev.yaml`:
-```yaml
-lighthouse:
-  beacon:
-    enrAddress: "YOUR_PUBLIC_IP"  # For P2P connectivity
+### Cloud
+
+For cloud Kubernetes with LoadBalancer support:
+
+```bash
+# Select you cluster's Kubeconfig & Deploy
+./provision.sh --cloud
 ```
 
-## P2P Networking
+The LoadBalancer automatically discovers its external IP for peer connectivity.
 
-For beacon to find peers:
-1. Set `enrAddress` to your public IP
-2. Port forward 9000 TCP+UDP on your router
+## Commands Reference
 
-Without this, sync distance will keep increasing.
+| Command | Description |
+|---------|-------------|
+| `./provision.sh` | Create KIND cluster, deploy Geth + Lighthouse |
+| `./provision.sh --cloud` | Deploy to existing cloud Kubernetes cluster |
+| `./start-validator.sh <keys>` | Import validator keys |
+| `./check-health.sh` | Show sync status and validator state |
+
+## Alternative Deployments
+
+### Docker Compose
+
+For simpler single-machine deployments:
+
+```bash
+mkdir -p secrets && openssl rand -hex 32 > secrets/jwtsecret
+docker compose up -d
+```
+
+### systemd (Bare Metal)
+
+For production Linux servers:
+
+```bash
+sudo cp systemd/*.service /etc/systemd/system/
+sudo systemctl daemon-reload
+sudo systemctl enable --now eth-geth eth-beacon eth-validator
+```
 
 ## Cleanup
 
 ```bash
+# KIND (local)
 helm uninstall eth-validator -n eth-validator
 kind delete cluster --name eth-validator
+
+# Docker Compose
+docker compose down -v
+
+# Cloud
+helm uninstall eth-validator -n eth-validator
 ```
+
