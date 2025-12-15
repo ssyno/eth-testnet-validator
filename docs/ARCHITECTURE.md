@@ -6,11 +6,11 @@ Overview of the Ethereum validator stack components and their interactions.
 
 ```
 ┌─────────────────────────────────────────────────────────────────────────────────┐
-│                           Production Architecture                                │
-│                                                                                  │
+│                           Production Architecture                               │
+│                                                                                 │
 │  ┌──────────────┐     ┌──────────────────────────────────────────────────────┐  │
-│  │   Secrets    │     │              Kubernetes Cluster                       │  │
-│  │   ─────────  │     │                                                       │  │
+│  │   Secrets    │     │              Kubernetes Cluster                      │  │
+│  │   ─────────  │     │                                                      │  │
 │  │ ┌──────────┐ │     │  ┌─────────────┐  ┌─────────────┐  ┌─────────────┐   │  │
 │  │ │  Vault   │─┼─────┼─▶│    Geth     │──│  Lighthouse │──│  Lighthouse │   │  │
 │  │ │   KMS    │ │     │  │ (execution) │  │  (beacon)   │  │ (validator) │   │  │
@@ -21,18 +21,18 @@ Overview of the Ethereum validator stack components and their interactions.
 │  │  Monitoring  │     │  │              Persistent Volumes                 │ │  │
 │  │  ──────────  │     │  │   (100Gi geth)  (100Gi beacon)  (10Gi validator)│ │  │
 │  │ ┌──────────┐ │     │  └─────────────────────────────────────────────────┘ │  │
-│  │ │Prometheus│◀┼─────┼──────────────────────────────────────────────────────┘  │
-│  │ │ Grafana  │ │     │                                                         │
-│  │ │AlertMgr  │ │     └─────────────────────────────────────────────────────────┘
-│  │ └──────────┘ │
-│  └──────────────┘                    ┌─────────────────┐
-│                                      │  P2P Network    │
-│  ┌──────────────┐                    │  ────────────── │
-│  │   Backup     │                    │  Port 30303/tcp │◀── Execution P2P
-│  │  ──────────  │                    │  Port 30303/udp │
-│  │  S3/GCS/R2   │                    │  Port 9000/tcp  │◀── Consensus P2P
-│  │  snapshots   │                    │  Port 9000/udp  │
-│  └──────────────┘                    └─────────────────┘
+│  │ │Prometheus│◀┼─────└──────────────────────────────────────────────────────┘  │
+│  │ │ Grafana  │ │                                                               │
+│  │ │AlertMgr  │ │                                                               │
+│  │ └──────────┘ │                                                               │
+│  └──────────────┘                    ┌─────────────────┐                        │
+│                                      │  P2P Network    │                        │
+│  ┌──────────────┐                    │  ────────────── │                        │
+│  │   Backup     │                    │  Port 30303/tcp │◀── Execution P2P       │
+│  │  ──────────  │                    │  Port 30303/udp │                        │
+│  │  S3/GCS/R2   │                    │  Port 9000/tcp  │◀── Consensus P2P       │
+│  │  snapshots   │                    │  Port 9000/udp  │                        │
+│  └──────────────┘                    └─────────────────┘                        │
 └─────────────────────────────────────────────────────────────────────────────────┘
 ```
 
