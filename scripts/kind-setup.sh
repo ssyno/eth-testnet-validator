@@ -8,7 +8,7 @@ if kind get clusters 2>/dev/null | grep -q "^$NAME$"; then
     exit 0
 fi
 
-cat <<EOF | kind create cluster --name $NAME --config=-
+cat <<EOF | kind create cluster --name "$NAME" --config=-
 kind: Cluster
 apiVersion: kind.x-k8s.io/v1alpha4
 nodes:
