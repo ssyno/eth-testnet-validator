@@ -71,6 +71,7 @@ lighthouse:
       http: 5052
       metrics: 5054
       p2p: 9000
+      quic: 9001
     checkpointSyncUrl: "https://sepolia.beaconstate.info/"
     allowInsecureGenesisSync: false
     bootnodes:
@@ -80,6 +81,11 @@ lighthouse:
     enrAddress: ""
     enrTcpPort: ""
     enrUdpPort: ""
+    # P2P LoadBalancer service for automatic external IP discovery
+    p2pService:
+      enabled: false
+      loadBalancerIP: ""
+      annotations: {}
     waitForExecution:
       enabled: true
       maxWaitSeconds: 120

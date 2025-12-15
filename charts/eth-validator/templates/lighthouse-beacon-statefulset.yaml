@@ -17,6 +17,9 @@ spec:
         {{- include "eth-validator.beacon.selectorLabels" . | nindent 8 }}
     spec:
       terminationGracePeriodSeconds: 120
+      {{- if .Values.lighthouse.beacon.p2pService.enabled }}
+      serviceAccountName: {{ include "eth-validator.beacon.fullname" . }}
+      {{- end }}
       {{- if .Values.lighthouse.beacon.hostNetwork }}
       hostNetwork: true
       dnsPolicy: ClusterFirstWithHostNet
@@ -36,25 +39,49 @@ spec:
       tolerations:
         {{- toYaml . | nindent 8 }}
       {{- end }}
-      {{- with .Values.lighthouse.beacon.topologySpreadConstraints }}
-      topologySpreadConstraints:
-        {{- toYaml . | nindent 8 }}
-      {{- end }}
       initContainers:
         - name: init-datadir
           image: "{{ .Values.initImage.repository }}:{{ .Values.initImage.tag }}"
           imagePullPolicy: {{ .Values.initImage.pullPolicy }}
-          command:
-            - sh
-            - -c
-            - |
-              mkdir -p /data/beacon
+          command: ["sh", "-c", "mkdir -p /data/beacon"]
           securityContext:
             runAsUser: 1000
             runAsGroup: 1000
           volumeMounts:
             - name: data
               mountPath: /data
+        {{- if .Values.lighthouse.beacon.p2pService.enabled }}
+        - name: discover-external-ip
+          image: curlimages/curl:8.11.0
+          imagePullPolicy: IfNotPresent
+          command:
+            - sh
+            - -c
+            - |
+              SERVICE="{{ include "eth-validator.beacon.fullname" . }}-p2p"
+              echo "Waiting for LoadBalancer IP..."
+              for i in $(seq 1 60); do
+                IP=$(curl -sf \
+                  --cacert /var/run/secrets/kubernetes.io/serviceaccount/ca.crt \
+                  -H "Authorization: Bearer $(cat /var/run/secrets/kubernetes.io/serviceaccount/token)" \
+                  "https://kubernetes.default.svc/api/v1/namespaces/{{ .Release.Namespace }}/services/$SERVICE" \
+                  | grep -o '"ip": *"[^"]*"' | head -1 | sed 's/.*"\([0-9.]*\)".*/\1/')
+                if [ -n "$IP" ]; then
+                  echo "External IP: $IP"
+                  echo "$IP" > /config/external-ip
+                  exit 0
+                fi
+                sleep 5
+              done
+              echo "Timeout waiting for LoadBalancer IP"
+              exit 1
+          securityContext:
+            runAsUser: 1000
+            runAsGroup: 1000
+          volumeMounts:
+            - name: config
+              mountPath: /config
+        {{- end }}
         {{- if .Values.lighthouse.beacon.waitForExecution.enabled }}
         - name: wait-for-geth
           image: "{{ .Values.initImage.repository }}:{{ .Values.initImage.tag }}"
@@ -63,30 +90,48 @@ spec:
             - sh
             - -c
             - |
-              echo "Waiting for Geth authrpc ({{ include "eth-validator.geth.fullname" . }}:{{ .Values.geth.ports.authrpc }})..."
-              max={{ .Values.lighthouse.beacon.waitForExecution.maxWaitSeconds | int }}
-              interval={{ .Values.lighthouse.beacon.waitForExecution.checkIntervalSeconds | int }}
-              elapsed=0
-              while ! nc -z {{ include "eth-validator.geth.fullname" . }} {{ .Values.geth.ports.authrpc }}; do
-                if [ "$elapsed" -ge "$max" ]; then
-                  echo "Timed out after ${elapsed}s waiting for geth authrpc; continuing anyway."
-                  exit 0
-                fi
-                echo "Geth not ready yet (${elapsed}s/${max}s), waiting..."
-                sleep "$interval"
-                elapsed=$((elapsed + interval))
+              echo "Waiting for Geth..."
+              timeout={{ .Values.lighthouse.beacon.waitForExecution.maxWaitSeconds }}
+              while ! nc -z {{ include "eth-validator.geth.fullname" . }} {{ .Values.geth.ports.authrpc }} 2>/dev/null; do
+                timeout=$((timeout - 2))
+                [ $timeout -le 0 ] && echo "Timeout" && exit 0
+                sleep 2
               done
-              echo "Geth authrpc is reachable."
+              echo "Geth ready"
           securityContext:
             runAsUser: 1000
             runAsGroup: 1000
         {{- end }}
       containers:
-        - name: lighthouse-beacon
+        - name: lighthouse
           image: "{{ .Values.lighthouse.beacon.image.repository }}:{{ .Values.lighthouse.beacon.image.tag }}"
           imagePullPolicy: {{ .Values.lighthouse.beacon.image.pullPolicy }}
           securityContext:
             {{- toYaml .Values.lighthouse.beacon.containerSecurityContext | nindent 12 }}
+          {{- if .Values.lighthouse.beacon.p2pService.enabled }}
+          command:
+            - sh
+            - -c
+            - |
+              ENR_IP=$(cat /config/external-ip)
+              exec lighthouse beacon_node \
+                --network={{ .Values.global.network | default .Values.network }} \
+                --datadir=/data \
+                --execution-endpoint=http://{{ include "eth-validator.geth.fullname" . }}:{{ .Values.geth.ports.authrpc }} \
+                --execution-jwt=/secrets/jwtsecret \
+                {{- if .Values.lighthouse.beacon.checkpointSyncUrl }}
+                --checkpoint-sync-url={{ .Values.lighthouse.beacon.checkpointSyncUrl }} \
+                {{- end }}
+                --http --http-address=0.0.0.0 --http-port={{ .Values.lighthouse.beacon.ports.http }} \
+                --metrics --metrics-address=0.0.0.0 --metrics-port={{ .Values.lighthouse.beacon.ports.metrics }} \
+                --port={{ .Values.lighthouse.beacon.ports.p2p }} \
+                --enr-address=$ENR_IP \
+                --enr-tcp-port={{ .Values.lighthouse.beacon.ports.p2p }} \
+                --enr-udp-port={{ .Values.lighthouse.beacon.ports.p2p }} \
+                {{- range .Values.lighthouse.beacon.extraArgs }}
+                {{ . }} \
+                {{- end }}
+          {{- else }}
           args:
             - lighthouse
             - beacon_node
@@ -94,43 +139,30 @@ spec:
             - --datadir=/data
             - --execution-endpoint=http://{{ include "eth-validator.geth.fullname" . }}:{{ .Values.geth.ports.authrpc }}
             - --execution-jwt=/secrets/jwtsecret
-            {{- $checkpointSyncUrl := .Values.global.checkpointSyncUrl | default .Values.lighthouse.beacon.checkpointSyncUrl }}
-            {{- if $checkpointSyncUrl }}
-            - --checkpoint-sync-url={{ $checkpointSyncUrl }}
-            {{- else if .Values.lighthouse.beacon.allowInsecureGenesisSync }}
-            - --allow-insecure-genesis-sync
+            {{- if .Values.lighthouse.beacon.checkpointSyncUrl }}
+            - --checkpoint-sync-url={{ .Values.lighthouse.beacon.checkpointSyncUrl }}
             {{- end }}
             - --http
             - --http-address=0.0.0.0
             - --http-port={{ .Values.lighthouse.beacon.ports.http }}
-            - --http-allow-origin=*
             - --metrics
             - --metrics-address=0.0.0.0
             - --metrics-port={{ .Values.lighthouse.beacon.ports.metrics }}
-            - --metrics-allow-origin=*
             - --port={{ .Values.lighthouse.beacon.ports.p2p }}
             {{- if .Values.lighthouse.beacon.enrAddress }}
             - --enr-address={{ .Values.lighthouse.beacon.enrAddress }}
-            {{- end }}
-            {{- if .Values.lighthouse.beacon.enrTcpPort }}
-            - --enr-tcp-port={{ .Values.lighthouse.beacon.enrTcpPort }}
-            {{- end }}
-            {{- if .Values.lighthouse.beacon.enrUdpPort }}
-            - --enr-udp-port={{ .Values.lighthouse.beacon.enrUdpPort }}
-            {{- end }}
-            {{- if .Values.lighthouse.beacon.bootnodes }}
-            - --boot-nodes={{ join "," .Values.lighthouse.beacon.bootnodes }}
+            - --enr-tcp-port={{ .Values.lighthouse.beacon.ports.p2p }}
+            - --enr-udp-port={{ .Values.lighthouse.beacon.ports.p2p }}
             {{- end }}
             {{- range .Values.lighthouse.beacon.extraArgs }}
             - {{ . | quote }}
             {{- end }}
+          {{- end }}
           ports:
             - name: http
               containerPort: {{ .Values.lighthouse.beacon.ports.http }}
-              protocol: TCP
             - name: metrics
               containerPort: {{ .Values.lighthouse.beacon.ports.metrics }}
-              protocol: TCP
             - name: p2p-tcp
               containerPort: {{ .Values.lighthouse.beacon.ports.p2p }}
               protocol: TCP
@@ -144,7 +176,6 @@ spec:
               port: http
             initialDelaySeconds: {{ .Values.probes.lighthouse.beacon.startup.initialDelaySeconds }}
             periodSeconds: {{ .Values.probes.lighthouse.beacon.startup.periodSeconds }}
-            timeoutSeconds: {{ .Values.probes.lighthouse.beacon.startup.timeoutSeconds }}
             failureThreshold: {{ .Values.probes.lighthouse.beacon.startup.failureThreshold }}
           {{- end }}
           {{- if .Values.probes.lighthouse.beacon.liveness.enabled }}
@@ -154,7 +185,6 @@ spec:
               port: http
             initialDelaySeconds: {{ .Values.probes.lighthouse.beacon.liveness.initialDelaySeconds }}
             periodSeconds: {{ .Values.probes.lighthouse.beacon.liveness.periodSeconds }}
-            timeoutSeconds: {{ .Values.probes.lighthouse.beacon.liveness.timeoutSeconds }}
             failureThreshold: {{ .Values.probes.lighthouse.beacon.liveness.failureThreshold }}
           {{- end }}
           {{- if .Values.probes.lighthouse.beacon.readiness.enabled }}
@@ -164,7 +194,6 @@ spec:
               port: http
             initialDelaySeconds: {{ .Values.probes.lighthouse.beacon.readiness.initialDelaySeconds }}
             periodSeconds: {{ .Values.probes.lighthouse.beacon.readiness.periodSeconds }}
-            timeoutSeconds: {{ .Values.probes.lighthouse.beacon.readiness.timeoutSeconds }}
             failureThreshold: {{ .Values.probes.lighthouse.beacon.readiness.failureThreshold }}
           {{- end }}
           resources:
@@ -175,6 +204,11 @@ spec:
             - name: jwt-secret
               mountPath: /secrets
               readOnly: true
+            {{- if .Values.lighthouse.beacon.p2pService.enabled }}
+            - name: config
+              mountPath: /config
+              readOnly: true
+            {{- end }}
       volumes:
         - name: jwt-secret
           secret:
@@ -182,6 +216,10 @@ spec:
             items:
               - key: {{ .Values.jwtSecret.key }}
                 path: jwtsecret
+        {{- if .Values.lighthouse.beacon.p2pService.enabled }}
+        - name: config
+          emptyDir: {}
+        {{- end }}
   {{- if .Values.lighthouse.beacon.persistence.enabled }}
   volumeClaimTemplates:
     - metadata:

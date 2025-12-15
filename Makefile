@@ -1,30 +1,49 @@
-.PHONY: provision start-validator check-health up down status logs clean
+.PHONY: help provision start check clean logs status
 
 NAMESPACE ?= eth-validator
-RELEASE ?= eth-validator
 
-# Main 3 commands
+# Default target
+help:
+	@echo "Ethereum Testnet Validator"
+	@echo ""
+	@echo "Usage:"
+	@echo "  make provision          Deploy infrastructure (local KIND)"
+	@echo "  make provision-cloud    Deploy to cloud Kubernetes"
+	@echo "  make start KEYS=<dir>   Import validator keys"
+	@echo "  make check              Health check"
+	@echo ""
+	@echo "Helpers:"
+	@echo "  make status             Show pod status"
+	@echo "  make logs               Follow all logs"
+	@echo "  make clean              Remove everything"
+
+# === Main 3 Commands ===
+
 provision:
 	./provision.sh
 
-start-validator:
-	@echo "Usage: ./start-validator.sh <keys_directory>"
+provision-cloud:
+	./provision.sh --cloud
 
-check-health:
+start:
+ifndef KEYS
+	@echo "Usage: make start KEYS=./validator_keys"
+	@exit 1
+endif
+	./start-validator.sh $(KEYS)
+
+check:
 	./check-health.sh
 
-# Helpers
-up:
-	./scripts/kind-setup.sh
-
-down:
-	./scripts/kind-teardown.sh
+# === Helpers ===
 
 status:
-	@kubectl get pods -n $(NAMESPACE)
+	@kubectl get pods -n $(NAMESPACE) -o wide
 
 logs:
-	kubectl logs -n $(NAMESPACE) -l app.kubernetes.io/instance=$(RELEASE) -f --max-log-requests=10
+	kubectl logs -n $(NAMESPACE) -l app.kubernetes.io/instance=eth-validator -f --max-log-requests=10
 
 clean:
-	helm uninstall $(RELEASE) -n $(NAMESPACE) || true
+	helm uninstall eth-validator -n $(NAMESPACE) 2>/dev/null || true
+	kind delete cluster --name eth-validator 2>/dev/null || true
+	@echo "Cleaned up"

@@ -1,0 +1,38 @@
+{{- if and .Values.lighthouse.beacon.enabled .Values.lighthouse.beacon.p2pService.enabled }}
+#
+# RBAC for LoadBalancer IP discovery
+# Allows the beacon init container to query its own P2P service
+#
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: {{ include "eth-validator.beacon.fullname" . }}
+  labels:
+    {{- include "eth-validator.beacon.labels" . | nindent 4 }}
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: {{ include "eth-validator.beacon.fullname" . }}-service-reader
+  labels:
+    {{- include "eth-validator.beacon.labels" . | nindent 4 }}
+rules:
+  - apiGroups: [""]
+    resources: ["services"]
+    resourceNames: ["{{ include "eth-validator.beacon.fullname" . }}-p2p"]
+    verbs: ["get"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: {{ include "eth-validator.beacon.fullname" . }}-service-reader
+  labels:
+    {{- include "eth-validator.beacon.labels" . | nindent 4 }}
+subjects:
+  - kind: ServiceAccount
+    name: {{ include "eth-validator.beacon.fullname" . }}
+roleRef:
+  kind: Role
+  name: {{ include "eth-validator.beacon.fullname" . }}-service-reader
+  apiGroup: rbac.authorization.k8s.io
+{{- end }}

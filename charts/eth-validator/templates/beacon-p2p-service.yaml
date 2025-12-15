@@ -1,0 +1,36 @@
+{{- if and .Values.lighthouse.beacon.enabled .Values.lighthouse.beacon.p2pService.enabled }}
+#
+# LoadBalancer service for P2P traffic
+# Provides automatic external IP discovery for cloud deployments
+#
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "eth-validator.beacon.fullname" . }}-p2p
+  labels:
+    {{- include "eth-validator.beacon.labels" . | nindent 4 }}
+  {{- with .Values.lighthouse.beacon.p2pService.annotations }}
+  annotations:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+spec:
+  type: LoadBalancer
+  {{- with .Values.lighthouse.beacon.p2pService.loadBalancerIP }}
+  loadBalancerIP: {{ . }}
+  {{- end }}
+  ports:
+    - name: p2p-tcp
+      port: {{ .Values.lighthouse.beacon.ports.p2p }}
+      targetPort: p2p-tcp
+      protocol: TCP
+    - name: p2p-udp
+      port: {{ .Values.lighthouse.beacon.ports.p2p }}
+      targetPort: p2p-udp
+      protocol: UDP
+    - name: quic
+      port: {{ .Values.lighthouse.beacon.ports.quic | default 9001 }}
+      targetPort: {{ .Values.lighthouse.beacon.ports.quic | default 9001 }}
+      protocol: UDP
+  selector:
+    {{- include "eth-validator.beacon.selectorLabels" . | nindent 4 }}
+{{- end }}
