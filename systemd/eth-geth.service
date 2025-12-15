@@ -1,0 +1,38 @@
+[Unit]
+Description=Geth Execution Client (Sepolia)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=ethereum
+Group=ethereum
+Restart=always
+RestartSec=5
+TimeoutStopSec=300
+
+Environment=DATADIR=/var/lib/ethereum/geth
+Environment=JWT_SECRET=/etc/ethereum/jwtsecret
+
+ExecStart=/usr/local/bin/geth \
+    --sepolia \
+    --datadir=${DATADIR} \
+    --http \
+    --http.addr=127.0.0.1 \
+    --http.api=eth,net,web3,engine \
+    --authrpc.addr=127.0.0.1 \
+    --authrpc.jwtsecret=${JWT_SECRET} \
+    --metrics \
+    --metrics.addr=127.0.0.1 \
+    --metrics.port=6060 \
+    --port=30303 \
+    --discovery.port=30303
+
+NoNewPrivileges=yes
+PrivateTmp=yes
+ProtectSystem=strict
+ProtectHome=yes
+ReadWritePaths=/var/lib/ethereum/geth
+
+[Install]
+WantedBy=multi-user.target

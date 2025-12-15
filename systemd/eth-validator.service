@@ -1,0 +1,36 @@
+[Unit]
+Description=Lighthouse Validator Client (Sepolia)
+After=network-online.target eth-beacon.service
+Wants=network-online.target
+Requires=eth-beacon.service
+
+[Service]
+Type=simple
+User=ethereum
+Group=ethereum
+Restart=always
+RestartSec=5
+TimeoutStopSec=300
+
+Environment=DATADIR=/var/lib/ethereum/lighthouse-validator
+Environment=FEE_RECIPIENT=0x0000000000000000000000000000000000000000
+Environment=GRAFFITI=eth-validator
+
+ExecStart=/usr/local/bin/lighthouse validator_client \
+    --network=sepolia \
+    --datadir=${DATADIR} \
+    --beacon-nodes=http://127.0.0.1:5052 \
+    --graffiti=${GRAFFITI} \
+    --suggested-fee-recipient=${FEE_RECIPIENT} \
+    --metrics \
+    --metrics-address=127.0.0.1 \
+    --metrics-port=5064
+
+NoNewPrivileges=yes
+PrivateTmp=yes
+ProtectSystem=strict
+ProtectHome=yes
+ReadWritePaths=/var/lib/ethereum/lighthouse-validator
+
+[Install]
+WantedBy=multi-user.target
