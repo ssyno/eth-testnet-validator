@@ -1,5 +1,4 @@
 # Ethereum Testnet Validator
-
 Ethereum Sepolia testnet validator on Kubernetes — deployable with **3 commands**.
 
 ## Quick Start
@@ -17,7 +16,32 @@ Ethereum Sepolia testnet validator on Kubernetes — deployable with **3 command
 
 ## Requirements
 
-- kubectl, helm, kind, docker, openssl
+- **Tools**: `kubectl`, `helm`, `kind` (for local), `docker`, `openssl`
+- **Validator Keys**: Generated with [ethstaker-deposit-cli](https://github.com/ethstaker/ethstaker-deposit-cli)
+
+## Deployment Modes
+
+### Local (KIND)
+
+Default mode - creates a local Kubernetes cluster for development:
+
+```bash
+./provision.sh
+```
+
+**Note**: Requires port forwarding on your router for P2P connectivity:
+- **30303 TCP/UDP** → your machine (Geth P2P)
+- **9000 TCP/UDP** → your machine (Lighthouse P2P)
+
+### Cloud
+
+For production Kubernetes clusters (GKE, EKS, DigitalOcean, etc.):
+
+```bash
+./provision.sh --cloud
+```
+
+Automatically discovers external IPs via LoadBalancer services.
 
 ## Generate Validator Keys
 
@@ -71,72 +95,50 @@ https://sepolia.launchpad.ethereum.org/
 └─────────────────────────────────────────────────────────────────┘
 ```
 
-## Deployment Options
+**Components**:
+- **Geth**: Execution layer client (syncs Ethereum blockchain)
+- **Lighthouse Beacon**: Consensus layer client (manages beacon chain)
+- **Lighthouse Validator**: Validator client (performs attestations)
 
-### Local (KIND)
+## Configuration
 
-Default mode - creates a local Kubernetes cluster:
+Deployment configs in `values.yaml`:
 
+Override defaults:
 ```bash
-./provision.sh
+helm upgrade eth-validator ./charts/eth-validator \
+  -n eth-validator \
+  --values values.yaml \
+  --set lighthouse.validator.graffiti="my-validator"
 ```
 
-Requires port forwarding on your router:
-- **30303 TCP/UDP** → your machine (Geth P2P)
-- **9000 TCP/UDP** → your machine (Lighthouse P2P)
+## Monitoring
 
-### Cloud
+Metrics exposed on:
+- Geth: `:6060/debug/metrics/prometheus`
+- Lighthouse Beacon: `:5054/metrics`
+- Lighthouse Validator: `:5064/metrics`
 
-For cloud Kubernetes with LoadBalancer support:
-
-```bash
-# Select you cluster's Kubeconfig & Deploy
-./provision.sh --cloud
+Enable Prometheus ServiceMonitor:
+```yaml
+serviceMonitor:
+  enabled: true
 ```
 
-The LoadBalancer automatically discovers its external IP for peer connectivity.
+## Security Features
 
-## Commands Reference
-
-| Command | Description |
-|---------|-------------|
-| `./provision.sh` | Create KIND cluster, deploy Geth + Lighthouse |
-| `./provision.sh --cloud` | Deploy to existing cloud Kubernetes cluster |
-| `./start-validator.sh <keys>` | Import validator keys |
-| `./check-health.sh` | Show sync status and validator state |
-
-## Alternative Deployments
-
-### Docker Compose
-
-For simpler single-machine deployments:
-
-```bash
-mkdir -p secrets && openssl rand -hex 32 > secrets/jwtsecret
-docker compose up -d
-```
-
-### systemd (Bare Metal)
-
-For production Linux servers:
-
-```bash
-sudo cp systemd/*.service /etc/systemd/system/
-sudo systemctl daemon-reload
-sudo systemctl enable --now eth-geth eth-beacon eth-validator
-```
+- JWT authentication between execution/consensus layers
+- Encrypted validator keystores (never plaintext keys)
+- Pod Security Context (non-root, drop capabilities)
+- Network Policies (optional, disabled by default)
+- Secret management via Kubernetes secrets
 
 ## Cleanup
 
 ```bash
-# KIND (local)
+# Remove deployment
 helm uninstall eth-validator -n eth-validator
+
+# Remove local KIND cluster
 kind delete cluster --name eth-validator
-
-# Docker Compose
-docker compose down -v
-
-# Cloud
-helm uninstall eth-validator -n eth-validator
 ```
-
