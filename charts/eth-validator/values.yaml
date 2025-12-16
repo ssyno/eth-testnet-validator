@@ -170,6 +170,26 @@ serviceMonitor:
   scrapeTimeout: 10s
   labels: {}
 
+# External Secrets Operator integration for KMS/Vault
+# Requires: https://external-secrets.io
+externalSecrets:
+  enabled: false
+  secretStore: ""  # Name of SecretStore/ClusterSecretStore
+  secretStoreKind: SecretStore  # SecretStore or ClusterSecretStore
+  refreshInterval: 1h
+
+  # Validator keystore password from KMS/Vault
+  validatorPassword:
+    enabled: false
+    key: ""  # Path to secret in KMS/Vault
+    property: ""  # Optional: JSON key for nested secrets
+
+  # JWT secret from KMS/Vault
+  jwtSecret:
+    enabled: false
+    key: ""  # Path to secret in KMS/Vault
+    property: ""  # Optional: JSON key for nested secrets
+
 service:
   type: ClusterIP
   annotations: {}
