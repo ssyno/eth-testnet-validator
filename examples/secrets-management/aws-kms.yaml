@@ -1,0 +1,36 @@
+# AWS Secrets Manager
+#
+# Store secrets:
+#   aws secretsmanager create-secret --name eth-validator/jwt-secret --secret-string "$(openssl rand -hex 32)"
+#   aws secretsmanager create-secret --name eth-validator/validator-password --secret-string "your-password"
+
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: eth-validator-secrets
+  namespace: eth-validator
+  annotations:
+    eks.amazonaws.com/role-arn: arn:aws:iam::ACCOUNT_ID:role/eth-validator-secrets-role
+
+---
+apiVersion: external-secrets.io/v1beta1
+kind: SecretStore
+metadata:
+  name: aws-secretsmanager
+  namespace: eth-validator
+spec:
+  provider:
+    aws:
+      service: SecretsManager
+      region: us-east-1
+      auth:
+        jwt:
+          serviceAccountRef:
+            name: eth-validator-secrets
+
+# Deploy:
+#   kubectl apply -f aws-kms.yaml
+#   helm upgrade eth-validator ./charts/eth-validator -n eth-validator \
+#     --set externalSecrets.enabled=true \
+#     --set externalSecrets.secretStore=aws-secretsmanager

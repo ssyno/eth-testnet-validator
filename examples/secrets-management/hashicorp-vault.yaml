@@ -1,0 +1,47 @@
+# HashiCorp Vault
+#
+# Setup Vault:
+#   vault auth enable kubernetes
+#   vault kv put secret/eth-validator/jwt-secret value="$(openssl rand -hex 32)"
+#   vault kv put secret/eth-validator/validator-password value="your-password"
+#
+#   vault policy write eth-validator - <<EOF
+#   path "secret/data/eth-validator/*" { capabilities = ["read"] }
+#   EOF
+#
+#   vault write auth/kubernetes/role/eth-validator \
+#     bound_service_account_names=eth-validator-secrets \
+#     bound_service_account_namespaces=eth-validator \
+#     policies=eth-validator ttl=24h
+
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: eth-validator-secrets
+  namespace: eth-validator
+
+---
+apiVersion: external-secrets.io/v1beta1
+kind: SecretStore
+metadata:
+  name: vault-backend
+  namespace: eth-validator
+spec:
+  provider:
+    vault:
+      server: "https://vault.example.com:8200"
+      path: "secret"
+      version: "v2"
+      auth:
+        kubernetes:
+          mountPath: "kubernetes"
+          role: "eth-validator"
+          serviceAccountRef:
+            name: "eth-validator-secrets"
+
+# Deploy:
+#   kubectl apply -f hashicorp-vault.yaml
+#   helm upgrade eth-validator ./charts/eth-validator -n eth-validator \
+#     --set externalSecrets.enabled=true \
+#     --set externalSecrets.secretStore=vault-backend

@@ -1,0 +1,58 @@
+# SOPS with age encryption
+#
+# Encrypt secrets in Git, decrypt at deploy time.
+#
+# Setup:
+#   brew install sops age
+#   age-keygen -o age-key.txt
+#
+# Create .sops.yaml in repo root:
+#   creation_rules:
+#     - path_regex: .*\.enc\.yaml$
+#       age: age1your-public-key-here
+#
+# Encrypt:
+#   sops -e secrets.yaml > secrets.enc.yaml
+#
+# Decrypt:
+#   sops -d secrets.enc.yaml
+
+# Example encrypted secret (after running sops -e)
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: validator-secrets
+  namespace: eth-validator
+type: Opaque
+stringData:
+  password: ENC[AES256_GCM,data:...,type:str]
+  jwt-secret: ENC[AES256_GCM,data:...,type:str]
+sops:
+  age:
+    - recipient: age1xxxxxxxx
+      enc: |
+        -----BEGIN AGE ENCRYPTED FILE-----
+        ...
+        -----END AGE ENCRYPTED FILE-----
+  lastmodified: "2026-01-01T00:00:00Z"
+  version: x.x.x
+
+# --- Flux CD ---
+# Mount age key, reference in Kustomization:
+#
+#   decryption:
+#     provider: sops
+#     secretRef:
+#       name: sops-age-key
+
+# --- Argo CD ---
+# Mount age key in argocd-repo-server, use KSOPS:
+#
+#   env:
+#     - name: SOPS_AGE_KEY_FILE
+#       value: /sops/keys.txt
+
+# --- Helm ---
+# helm plugin install https://github.com/jkroepke/helm-secrets
+# helm secrets upgrade eth-validator ./charts/eth-validator -f secrets.enc.yaml

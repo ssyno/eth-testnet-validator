@@ -131,7 +131,8 @@ serviceMonitor:
 - Encrypted validator keystores (never plaintext keys)
 - Pod Security Context (non-root, drop capabilities)
 - Network Policies (optional, disabled by default)
-- Secret management via Kubernetes secrets
+
+For KMS/Vault/SOPS integration, see [examples/secrets-management](examples/secrets-management/).
 
 ## Cleanup
 

@@ -1,52 +1,15 @@
-Thank you for installing {{ .Chart.Name }}!
+{{ .Chart.Name }} deployed to {{ .Values.network | title }}.
 
-Your Ethereum {{ .Values.network | title }} validator stack is being deployed.
+Check status:
+  kubectl get pods -n {{ .Release.Namespace }} -l app.kubernetes.io/instance={{ .Release.Name }}
 
-Components:
-{{- if .Values.geth.enabled }}
-  - Geth (Execution Layer): {{ include "eth-validator.geth.fullname" . }}
-{{- end }}
-{{- if .Values.lighthouse.beacon.enabled }}
-  - Lighthouse Beacon (Consensus Layer): {{ include "eth-validator.beacon.fullname" . }}
-{{- end }}
-{{- if .Values.lighthouse.validator.enabled }}
-  - Lighthouse Validator: {{ include "eth-validator.validator.fullname" . }}
-{{- end }}
+View logs:
+  kubectl logs -n {{ .Release.Namespace }} -l app.kubernetes.io/component=execution -f
+  kubectl logs -n {{ .Release.Namespace }} -l app.kubernetes.io/component=consensus -f
+  kubectl logs -n {{ .Release.Namespace }} -l app.kubernetes.io/component=validator -f
 
-To check the status of your deployment:
+Required secrets:
+  - {{ .Values.jwtSecret.existingSecretName }} (key: {{ .Values.jwtSecret.key }})
+  - {{ .Values.validatorKeys.existingSecretName }} (validator_keys.tar.gz, validator_password.txt)
 
-  kubectl get pods -n {{ .Release.Namespace }} -l "app.kubernetes.io/instance={{ .Release.Name }}"
-
-To view logs:
-
-  # Geth logs
-  kubectl logs -n {{ .Release.Namespace }} -l "app.kubernetes.io/component=execution" -f
-
-  # Beacon logs
-  kubectl logs -n {{ .Release.Namespace }} -l "app.kubernetes.io/component=consensus" -f
-
-  # Validator logs
-  kubectl logs -n {{ .Release.Namespace }} -l "app.kubernetes.io/component=validator" -f
-
-To check sync status:
-
-  # Geth sync status
-  kubectl exec -n {{ .Release.Namespace }} {{ include "eth-validator.geth.fullname" . }}-0 -- \
-    geth attach --exec "eth.syncing" /data/geth.ipc
-
-  # Beacon sync status
-  kubectl exec -n {{ .Release.Namespace }} {{ include "eth-validator.beacon.fullname" . }}-0 -- \
-    curl -s http://localhost:{{ .Values.lighthouse.beacon.ports.http }}/eth/v1/node/syncing
-
-IMPORTANT NOTES:
-
-1. Make sure you have created the required secrets:
-   - JWT Secret: {{ .Values.jwtSecret.existingSecretName }} (key: {{ .Values.jwtSecret.key }})
-   - Validator Keys: {{ .Values.validatorKeys.existingSecretName }} (if running validator)
-     - Must contain: validator_keys.tar.gz and validator_password.txt
-
-2. Initial sync may take several hours to days depending on network conditions.
-
-3. Do NOT run multiple validator instances with the same keys - this will result in slashing!
-
-For more information, visit the project repository.
+WARNING: Never run multiple validators with the same keys - slashing risk!
